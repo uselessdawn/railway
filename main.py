@@ -4,8 +4,8 @@ from matplotlib.patches import Rectangle
 from matplotlib.font_manager import FontProperties
 import numpy as np
 # 设置中文字体路径
-# font_path = '/System/Library/Fonts/STHeiti Medium.ttc'
-font_path = 'C:\\Windows\\Fonts\\SimHei.ttf'
+font_path = '/System/Library/Fonts/STHeiti Medium.ttc'
+# font_path = 'C:\\Windows\\Fonts\\SimHei.ttf'
 font_prop = FontProperties(fname=font_path)
 
 # 全局设置字体
@@ -78,32 +78,97 @@ for point in falling_points:
 # 绘制限速区间图
 fig, ax = plt.subplots(figsize=(82, 15))
 
-# 绘制连续的折线
+
+# 绘制连续的折线，这个是绘制静态限速
 for i in range(1, len(final_x_values)):
     if final_x_values[i] == final_x_values[i - 1] or final_y_values[i] == final_y_values[i - 1]:
         ax.plot([final_x_values[i - 1], final_x_values[i]], [final_y_values[i - 1], final_y_values[i]], color='darkblue')
 
+        # 在两个端点之间生成一系列等间隔的点，并将这些点的坐标存储起来
 
+#下面开始画sbi
+# 创建一个空列表，用于存储线上所有的点的坐标
+line_points = []
+# 创建一个空字典，用于存储每个 x 值对应的最小 y 值
+x_to_y_min = {}
 a=0.5
 for i in range(1, len(final_x_values)):
     if final_x_values[i] == final_x_values[i - 1] or final_y_values[i] == final_y_values[i - 1]:
+        #这里是在画sbi的顶棚区
         ax.plot([final_x_values[i - 1], final_x_values[i]], [final_y_values[i - 1]-8, final_y_values[i]-8], color='green')
+        #我要记录水平顶棚区的y值，用于求最底下的线（垂直的不用记录了）
+        if final_y_values[i] == final_y_values[i - 1]:
+            # 找到 x_values 的起始点和结束点，使它们都是 0.5 的倍数
+            start_multiple_of_half = np.ceil(final_x_values[i - 1] / 0.5) * 0.5
+            end_multiple_of_half = np.floor(final_x_values[i] / 0.5) * 0.5
+
+            # 生成 x_values，使其从起始点到结束点，以 0.5 为步长
+            x_values = np.arange(start_multiple_of_half, end_multiple_of_half + 0.5, step=0.5)
+
+            # 生成与 x_values 相同长度的 y_values，使其保持与 final_y_values 相同
+            y_values = np.full_like(x_values, final_y_values[i - 1] - 8)
+            # 更新 x_to_y_min 字典中的值，保留每个 x 对应的最小 y 值
+            for x, y in zip(x_values, y_values):
+                if x not in x_to_y_min or y < x_to_y_min[x]:
+                    x_to_y_min[x] = y
+
+    #如果下降的话，涉及到曲线了
     if final_y_values[i] < final_y_values[i - 1]:
+        # x_end = final_x_values[i]
+        # x_start = x_end - 400
+        # x_curve = np.linspace(x_start, x_end, 100)
+        # y_curve = np.sqrt(2 * a * (x_end - x_curve) + (final_y_values[i]-8) * (final_y_values[i]-8) / (3.6 * 3.6)) * 3.6
+        # ax.plot(x_curve, y_curve, color='green')
+        # 计算曲线起点和终点，使其都是 0.5 的倍数
         x_end = final_x_values[i]
-        x_start = x_end - 400
-        x_curve = np.linspace(x_start, x_end, 100)
-        y_curve = np.sqrt(2 * a * (x_end - x_curve) + (final_y_values[i]-8) * (final_y_values[i]-8) / (3.6 * 3.6)) * 3.6
+        x_start = np.floor((x_end - 400) / 0.5) * 0.5  # 调整起点为最接近的 0.5 的倍数
+
+        # 生成曲线上的点
+        x_curve = np.arange(x_start, x_end + 0.1, 0.5)  # 步长为 0.5
+        y_curve = np.sqrt(2 * a * (x_end - x_curve) + (final_y_values[i] - 8) ** 2 / (3.6 ** 2)) * 3.6
+
+        # 绘制曲线
         ax.plot(x_curve, y_curve, color='green')
+
+        # # 更新 x_to_y_min 字典中的值，保留每个 x 对应的最小 y 值
+        # for x, y in zip(x_curve, y_curve):
+        #     if x not in x_to_y_min or y < x_to_y_min[x]:
+
+        # 更新 x_to_y_min 字典中的值，保留每个 x 对应的最小 y 值
+        for x, y in zip(x_curve, y_curve):
+            if x not in x_to_y_min or y < x_to_y_min[x]:
+                x_to_y_min[x] = y
+
 # 在每个车站终点前800米范围内绘制根号下2ax的曲线，a=1.2
 a = 0.5
 for index, row in df_station.iterrows():
+    # x_end = row['限速终点（m）']
+    # x_start = x_end - 500
+    # x_curve = np.linspace(x_start, x_end, 100)
+    # y_curve = np.sqrt(2 * a * (x_end - x_curve))*3.6
     x_end = row['限速终点（m）']
-    x_start = x_end - 500
-    x_curve = np.linspace(x_start, x_end, 100)
-    y_curve = np.sqrt(2 * a * (x_end - x_curve))*3.6
+    x_start = np.floor((x_end - 500) / 0.5) * 0.5  # 调整起点为最接近的 0.5 的倍数
+
+    # 生成曲线上的点
+    x_curve = np.arange(x_start, x_end + 0.1, 0.5)  # 步长为 0.5
+    y_curve = np.sqrt(2 * a * (x_end - x_curve)) * 3.6
+
     ax.plot(x_curve, y_curve, color='green')
 
+    for x, y in zip(x_curve, y_curve):
+        if x not in x_to_y_min or y < x_to_y_min[x]:
+            x_to_y_min[x] = y
 
+# 按照 x 值从小到大排序键值对
+sorted_line_points = sorted(x_to_y_min.items())
+print("这是sorted_line_point")
+print(sorted_line_points)
+# 解压缩排序后的点
+sorted_x_values, sorted_y_values = zip(*sorted_line_points)
+# plt.plot(sorted_x_values, sorted_y_values, color='yellow')
+for i in range(1, len(sorted_x_values)):
+    ax.plot([sorted_x_values[i - 1], sorted_x_values[i]], [sorted_y_values[i - 1], sorted_y_values[i]], color='yellow')
+        # 在两个端点之间生成一系列等间隔的点，并将这些点的坐标存储起来
 
 
 
