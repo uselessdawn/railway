@@ -161,8 +161,8 @@ for index, row in df_station.iterrows():
 
 # 按照 x 值从小到大排序键值对
 sorted_line_points = sorted(x_to_y_min.items())
-print("这是sorted_line_point")
-print(sorted_line_points)
+# print("这是sorted_line_point")
+# print(sorted_line_points)
 # 解压缩排序后的点
 sorted_x_values, sorted_y_values = zip(*sorted_line_points)
 # plt.plot(sorted_x_values, sorted_y_values, color='yellow')
@@ -205,4 +205,63 @@ plt.ylabel('限速值（km/h）', fontproperties=font_prop)
 plt.title('限速区间图', fontproperties=font_prop)
 plt.grid(True)
 plt.ylim(bottom=-20)  # 确保底部有足够的空间显示矩形和站台名称
+
+# 模拟列车运动
+def get_speed_limit(position, x_values, y_values):
+    # 获取当前位置的限速值
+    for i in range(len(x_values) - 1):
+        if x_values[i] <= position < x_values[i + 1]:
+            return y_values[i] * 1000 / 3600  # 转换为 m/s
+    return y_values[-1] * 1000 / 3600  # 转换为 m/s
+
+
+def simulate_train_movement(start_position, start_speed, accel, traction_accel, x_values, y_values):
+    positions = [start_position]
+    speeds = [start_speed]
+
+    current_speed = start_speed
+    current_position = start_position
+    dt = 0.1  # 时间步长，秒
+
+    while current_position < max(x_values):
+        if current_speed < 40 * 1000 / 3600:  # 40 km/h in m/s
+            current_speed += accel * dt
+        else:
+            current_speed += traction_accel * dt
+
+        current_limit = get_speed_limit(current_position, x_values, y_values)
+        if current_speed > current_limit:  # 如果超过限速，调整速度
+            current_speed = current_limit
+
+        current_position += current_speed * dt
+        positions.append(current_position)
+        speeds.append(current_speed * 3600 / 1000)  # 转换为 km/h
+
+        if current_position in x_values:  # 到达限速终点，停止计算
+            break
+
+    return positions, speeds
+
+train_x = final_x_values
+train_y = final_y_values
+
+# 删除指定的 train_x 元素
+value_to_remove = set(df_station['限速终点（m）'])  # 使用集合以避免重复值
+indices_to_keep = [i for i, x in enumerate(train_x) if x in value_to_remove]
+
+# 使用列表推导式创建新的train_x和train_y列表
+train_x_new = [train_x[i] for i in indices_to_keep]
+train_y_new = [train_y[i] for i in indices_to_keep]
+
+# 将新列表赋值给原始变量
+train_x = train_x_new
+train_y = train_y_new
+
+# 从每个限速终点开始模拟
+for i in range(1, len(train_x), 2):  # 只在限速终点开始模拟
+    start_position = train_x[i]
+    positions, speeds = simulate_train_movement(start_position, 0, 0.8, 0.5, train_x, train_y)
+    ax.plot(positions, speeds, color='pink', label=f'列车运动轨迹从{start_position}m开始')
+
+# plt.legend()
 plt.show()
