@@ -4,7 +4,8 @@ from matplotlib.patches import Rectangle
 from matplotlib.font_manager import FontProperties
 import numpy as np
 # 设置中文字体路径
-font_path = '/System/Library/Fonts/STHeiti Medium.ttc'
+# font_path = '/System/Library/Fonts/STHeiti Medium.ttc'
+font_path = 'C:\\Windows\\Fonts\\SimHei.ttf'
 font_prop = FontProperties(fname=font_path)
 
 # 全局设置字体
@@ -18,8 +19,6 @@ df_station = pd.read_excel(excel_file, sheet_name='station')
 df_curve = pd.read_excel(excel_file, sheet_name='curve')
 # 打印表头
 print(df_curve.columns.tolist())
-# 绘制限速区间图
-# fig, ax = plt.subplots(figsize=(22, 6))
 
 # 初始化数据点列表
 x_values = []
@@ -37,7 +36,6 @@ for index, row in df_curve.iterrows():
 # 按照 x 值排序
 sorted_data = sorted(zip(x_values, y_values))
 x_values_sorted, y_values_sorted = zip(*sorted_data)
-
 
 # 插入缺失的 y 值，默认设置为 87
 final_x_values = []
@@ -65,8 +63,20 @@ for x, y in sorted_data:
 
     previous_x = x
     previous_y = y
+
+# 找出 y 值下跌的地方
+falling_points = []
+for i in range(1, len(final_y_values)):
+    if final_y_values[i] < final_y_values[i - 1]:
+        falling_points.append((final_x_values[i], final_y_values[i]))
+
+# 输出下跌点
+print("下跌点位置（横坐标, 纵坐标）：")
+for point in falling_points:
+    print(point)
+
 # 绘制限速区间图
-fig, ax = plt.subplots(figsize=(132, 15))
+fig, ax = plt.subplots(figsize=(82, 15))
 
 # 绘制连续的折线
 for i in range(1, len(final_x_values)):
