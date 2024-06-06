@@ -33,6 +33,7 @@ print(f"ATO余量（km/h）：{ATO_value}")
 traction_cut_off_delay = df_baseInfor.loc[0, '牵引切断延时/s']
 traction_acceleration =  df_baseInfor.loc[0, '牵引加速度（m/s2）']
 brake_establish_delay = df_baseInfor.loc[0, '制动建立时延/s']
+brake_acceleration =  df_baseInfor.loc[0, '紧急制动率（m/s2）']
  
 # 加速度单位换算 
 traction_acceleration = traction_acceleration*3.6
@@ -158,12 +159,10 @@ for (rise_L0, rise_v0),(rise_t_L0, rise_t_v0), (pre_L0, pre_v0), (L0, v0) in zip
   
     # 计算对应的 v 值  
     # 注意单位换算
-    v_values = v0 + np.sqrt(2 * 1.2*3.6 * (L0 - L_values)) 
-
+    v_values = v0 + np.sqrt(2 * brake_acceleration*3.6 * (L0 - L_values)) 
   
     # 找到最接近 reclosing_velocity 的 v_value 的索引  
     closest_index_new = np.argmin(np.abs(v_values - pre_v0))
-
   
     # 使用索引获取最接近的 L_value 和 v_value  
     closest_L_value = L_values[closest_index_new]  
@@ -178,33 +177,36 @@ for (rise_L0, rise_v0),(rise_t_L0, rise_t_v0), (pre_L0, pre_v0), (L0, v0) in zip
     closest_L_value = round(closest_L_value / 0.5) * 0.5
     # 规范化 subset_L_values 中的每个元素为 0.5 的倍数
     subset_L_values = np.array(subset_L_values)
-    rounded_values = np.round(subset_L_values * 2) / 2    
+    rounded_values = np.round(subset_L_values * 2) / 2  
 
-    # # # 拼接顶棚数据-高速
-    if rise_t_L0 > closest_L_value :
+
+    # 数值处理好之后，这些没什么用了【去掉修正】  
+
+    # # # # 拼接顶棚数据-高速
+    # if rise_t_L0 > closest_L_value :
             
-        # 找到最接近 reclosing_velocity 的 v_value 的索引  
-        closest_index_new = np.argmin(np.abs(rise_L0 - L_values))
-        # 使用索引获取最接近的 L_value 和 v_value  
-        closest_L_value = L_values[closest_index_new]  
-        closest_v_value = v_values[closest_index_new]
+    #     # 找到最接近 reclosing_velocity 的 v_value 的索引  
+    #     closest_index_new = np.argmin(np.abs(rise_L0 - L_values))
+    #     # 使用索引获取最接近的 L_value 和 v_value  
+    #     closest_L_value = L_values[closest_index_new]  
+    #     closest_v_value = v_values[closest_index_new]
 
-        #-----开始绘制减速曲线-----
-        # 使用索引获取从 closest_index 到末尾的子集
-        subset_L_values = L_values[closest_index_new:]
-        subset_v_values = v_values[closest_index_new:]
-         # 规范化 closest_L_value 为 0.5 的倍数
-        closest_L_value = round(closest_L_value / 0.5) * 0.5
-        # 规范化 subset_L_values 中的每个元素为 0.5 的倍数
-        subset_L_values = np.array(subset_L_values)
-        rounded_values = np.round(subset_L_values * 2) / 2
+    #     #-----开始绘制减速曲线-----
+    #     # 使用索引获取从 closest_index 到末尾的子集
+    #     subset_L_values = L_values[closest_index_new:]
+    #     subset_v_values = v_values[closest_index_new:]
+    #      # 规范化 closest_L_value 为 0.5 的倍数
+    #     closest_L_value = round(closest_L_value / 0.5) * 0.5
+    #     # 规范化 subset_L_values 中的每个元素为 0.5 的倍数
+    #     subset_L_values = np.array(subset_L_values)
+    #     rounded_values = np.round(subset_L_values * 2) / 2
 
-        print(rise_t_L0 ,closest_L_value)
+    #     print(rise_t_L0 ,closest_L_value)
 
-    # # 如果上述方法处理完数据，还是大，那就再处理
-    if rise_t_L0 > closest_L_value :
+    # # # 如果上述方法处理完数据，还是大，那就再处理
+    # if rise_t_L0 > closest_L_value :
 
-        rise_t_L0 = closest_L_value
+    #     rise_t_L0 = closest_L_value
 
     # 处理起点问题
     if i == 0:
