@@ -155,16 +155,6 @@ for (x, y) in falling_points:
 
 ###------------------------------End----------------------------------------------
 
-# 找出 y 值下跌的地方
-falling_points = []
-for i in range(1, len(final_y_values)):
-    if final_y_values[i] < final_y_values[i - 1]:
-        falling_points.append((final_x_values[i], final_y_values[i]))
-
-# 输出下跌点
-print("下跌点位置（横坐标, 纵坐标）：")
-for point in falling_points:
-    print(point)
 
 # 绘制限速区间图
 fig, ax = plt.subplots(figsize=(82, 15))
