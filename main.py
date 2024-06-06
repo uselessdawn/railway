@@ -21,6 +21,46 @@ df_curve = pd.read_excel(excel_file, sheet_name='curve')
 # 打印表头
 print(df_curve.columns.tolist())
 
+###------------------EBI------------------------------
+df_grad = pd.read_excel(excel_file, sheet_name='grad')
+df_baseInfor = pd.read_excel(excel_file, sheet_name='BasicInfo')
+
+# 提取字段 常用制动率（m/s2） 的值
+ATO_value = df_baseInfor.loc[0, 'ATO余量（km/h）']
+print(f"ATO余量（km/h）：{ATO_value}")
+
+traction_cut_off_delay = df_baseInfor.loc[0, '牵引切断延时/s']
+traction_acceleration = df_baseInfor.loc[0, '牵引加速度（m/s2）']
+brake_establish_delay = df_baseInfor.loc[0, '制动建立时延/s']
+brake_acceleration = df_baseInfor.loc[0, '紧急制动率（m/s2）']
+
+# 加速度单位换算
+traction_acceleration = traction_acceleration * 3.6
+###--------------------End-----------------------------------
+
+###-------------------EBI 坡度处理--------------------------
+
+# 初始化坡度列表
+slope_points = []
+# 坡道加速度列表
+slope_accelerations = []
+# 合并 station 和 curve 数据【遍历坡度记录】
+for index, row in df_grad.iterrows():
+    # 坡道起点和终点
+    slope_points.append((row['坡道始点（m）'], row['坡道终点（m）']))
+    # 确保数据类型正确s
+    slope = float(row['坡度'])
+    flag = int(row['上下坡标志'])
+
+    # 计算坡度加速度并保留两位小数
+    slope_acceleration = round((row['坡度'] / 1.08) * (1 - row['上下坡标志']) * 1 * 0.01, 2)
+
+    # 将计算得到的值添加到slope_accelerations列表中
+    slope_accelerations.append(slope_acceleration)
+
+###----------------------End--------------------------
+
+
 # 初始化数据点列表
 x_values = []
 y_values = []
@@ -65,6 +105,56 @@ for x, y in sorted_data:
     previous_x = x
     previous_y = y
 
+###---------------------EBI:下落点------------------------------
+# 找出 y 值下跌的地方[]
+falling_points = []
+rising_points = []
+rising_points_temp = []
+# 记录y值下跌的前一个速度
+pre_falling_points = []
+for i in range(1, len(final_y_values)):
+    if final_y_values[i] < final_y_values[i - 1]:
+        # EBI的速度值要减去ATO余量（km/h）
+        falling_points.append((final_x_values[i], final_y_values[i]) - ATO_value)
+        pre_falling_points.append((final_x_values[i], final_y_values[i - 1]) - ATO_value)
+    elif final_y_values[i] > final_y_values[i - 1]:
+        # EBI的速度值要减去ATO余量（km/h）
+        rising_points_temp.append((final_x_values[i] + 80, final_y_values[i]) - ATO_value)
+        rising_points.append((final_x_values[i] + 80, final_y_values[i]) - ATO_value)
+
+# 在开头添加新的点
+pre_falling_points.insert(0, (357, 57))
+rising_points_temp.insert(0, (357, 57))
+falling_points.insert(0, (357, 57))
+# 添加终点位置
+rising_points.append((23194, 87))
+falling_points.append((23352, 57))
+pre_falling_points.append((23352, 87))
+# 输出下跌点
+print("下跌点位置（横坐标, 纵坐标）：")
+for point in falling_points:
+    print(point)
+
+# 存储最大坡度加速度的列表
+max_accelerations = []
+
+# 遍历 falling_points 列表中的每个点
+for (x, y) in falling_points:
+    start_x = x - 150
+    end_x = x
+    max_slope_acceleration = 0
+
+    for (slope_start, slope_end), slope_acceleration in zip(slope_points, slope_accelerations):
+        # 判断区段的交集
+        if not (slope_end < start_x or slope_start > end_x):
+            if max_slope_acceleration == 0 or slope_acceleration > max_slope_acceleration:
+                max_slope_acceleration = slope_acceleration
+
+    max_accelerations.append(max_slope_acceleration)
+    print("max_slope_acceleration", max_slope_acceleration)
+
+###------------------------------End----------------------------------------------
+
 # 找出 y 值下跌的地方
 falling_points = []
 for i in range(1, len(final_y_values)):
@@ -96,7 +186,7 @@ a=0.5
 for i in range(1, len(final_x_values)):
     if final_x_values[i] == final_x_values[i - 1] or final_y_values[i] == final_y_values[i - 1]:
         #这里是在画sbi的顶棚区
-        ax.plot([final_x_values[i - 1], final_x_values[i]], [final_y_values[i - 1]-8, final_y_values[i]-8], color='green')
+        # ax.plot([final_x_values[i - 1], final_x_values[i]], [final_y_values[i - 1]-8, final_y_values[i]-8], color='green')
         #我要记录水平顶棚区的y值，用于求最底下的线（垂直的不用记录了）
         if final_y_values[i] == final_y_values[i - 1]:
             # 找到 x_values 的起始点和结束点，使它们都是 0.5 的倍数
@@ -129,7 +219,7 @@ for i in range(1, len(final_x_values)):
         y_curve = np.sqrt(2 * a * (x_end - x_curve) + (final_y_values[i] - 8) ** 2 / (3.6 ** 2)) * 3.6
 
         # 绘制曲线
-        ax.plot(x_curve, y_curve, color='green')
+        # ax.plot(x_curve, y_curve, color='green')
 
         # # 更新 x_to_y_min 字典中的值，保留每个 x 对应的最小 y 值
         # for x, y in zip(x_curve, y_curve):
@@ -154,7 +244,7 @@ for index, row in df_station.iterrows():
     x_curve = np.arange(x_start, x_end + 0.1, 0.5)  # 步长为 0.5
     y_curve = np.sqrt(2 * a * (x_end - x_curve)) * 3.6
 
-    ax.plot(x_curve, y_curve, color='green')
+    # ax.plot(x_curve, y_curve, color='green')
 
     for x, y in zip(x_curve, y_curve):
         if x not in x_to_y_min or y < x_to_y_min[x]:
@@ -166,9 +256,9 @@ sorted_line_points = sorted(x_to_y_min.items())
 # print(sorted_line_points)
 # 解压缩排序后的点
 sorted_x_values, sorted_y_values = zip(*sorted_line_points)
-# plt.plot(sorted_x_values, sorted_y_values, color='yellow')
+# plt.plot(sorted_x_values, sorted_y_values, color='brown')
 for i in range(1, len(sorted_x_values)):
-    ax.plot([sorted_x_values[i - 1], sorted_x_values[i]], [sorted_y_values[i - 1], sorted_y_values[i]], color='yellow')
+    ax.plot([sorted_x_values[i - 1], sorted_x_values[i]], [sorted_y_values[i - 1], sorted_y_values[i]], color='brown')
         # 在两个端点之间生成一系列等间隔的点，并将这些点的坐标存储起来
 
 
@@ -193,7 +283,7 @@ for index, row in df_station.iterrows():
     rect_start = row['限速起点（m）']
     rect_end = row['限速终点（m）']
     rect_width = rect_end - rect_start
-    rect = Rectangle((rect_start, -10), rect_width, 10, linewidth=1, edgecolor='black', facecolor='yellow', alpha=0.5)
+    rect = Rectangle((rect_start, -10), rect_width, 10, linewidth=1, edgecolor='black', facecolor='brown', alpha=0.5)
     ax.add_patch(rect)
     midpoint = (rect_start + rect_end) / 2
     ax.text(midpoint, -15, row['站台名'], ha='center', fontproperties=font_prop)
@@ -205,6 +295,112 @@ for index, row in df_station.iterrows():
 
 ax.text(90, -18, '站停时间（s）:', ha='center', fontproperties=font_prop)
 ax.text(90, -10, 'Run Time（s）:', ha='center', fontproperties=font_prop)
+
+###---------------------EBI------------------------------
+# 创建大列表用于存储所有的 L 值和 v 值
+all_L_values = []
+all_v_values = []
+i = 0
+
+# 使用 zip 并行遍历 pre_falling_points 和 falling_points
+for (rise_L0, rise_v0), (rise_t_L0, rise_t_v0), (pre_L0, pre_v0), (L0, v0), slope_acceleration in zip(rising_points,
+                                                                                                      rising_points_temp,
+                                                                                                      pre_falling_points,
+                                                                                                      falling_points,
+                                                                                                      slope_accelerations):
+
+    # 规范化 L0, rise_L0, 和 rise_t_v0 为 0.5 的倍数
+    L0 = round(L0 / 0.5) * 0.5
+    rise_L0 = round(rise_L0 / 0.5) * 0.5
+    rise_t_L0 = round(rise_t_L0 / 0.5) * 0.5
+
+    # 从 0 到 L0 的 L 值，确保间隔为0.5的倍数
+    L_values = np.arange(L0 - 500, L0, 0.5)
+
+    # 计算对应的 v 值
+    # 注意单位换算
+    v_values = v0 + np.sqrt(2 * (brake_acceleration - slope_acceleration) * 3.6 * (L0 - L_values))
+
+    # 找到最接近 reclosing_velocity 的 v_value 的索引
+    closest_index_new = np.argmin(np.abs(v_values - pre_v0))
+
+    # 使用索引获取最接近的 L_value 和 v_value
+    closest_L_value = L_values[closest_index_new]
+    closest_v_value = v_values[closest_index_new]
+
+    # -----开始绘制减速曲线-----
+    # 使用索引获取从 closest_index 到末尾的子集
+    subset_L_values = L_values[closest_index_new:]
+    subset_v_values = v_values[closest_index_new:]
+
+    # 规范化 closest_L_value 为 0.5 的倍数
+    closest_L_value = round(closest_L_value / 0.5) * 0.5
+    # 规范化 subset_L_values 中的每个元素为 0.5 的倍数
+    subset_L_values = np.array(subset_L_values)
+    rounded_values = np.round(subset_L_values * 2) / 2
+
+    # 处理起点问题
+    if i == 0:
+        subset_L_values = [L for L, v in zip(subset_L_values, subset_v_values) if L > 356.5]
+        subset_v_values = [v for L, v in zip(subset_L_values, subset_v_values) if L > 356.5]
+    else:
+        tempL, tempV = falling_points[i - 1]
+        print(tempV, v0, pre_v0)
+
+    # 高速阶段
+    L_values_high = np.arange(rise_t_L0, closest_L_value, 0.5)  # 加入曲线平滑处理
+    v_values_high = np.full_like(L_values_high, rise_t_v0)  # 加入曲线平滑处理
+
+    # 低速阶段
+    L_values_low = np.arange(L0, rise_L0, 0.5)  # 加入曲线平滑处理
+    v_values_low = np.full_like(L_values_low, v0)  # 加入曲线平滑处理
+
+    # 高速阶段
+    all_L_values.extend(L_values_high)
+    all_v_values.extend(v_values_high)
+
+    # 拼接减速曲线数据
+    all_L_values.extend(subset_L_values)
+    all_v_values.extend(subset_v_values)
+
+    # 拼接顶棚数据-低俗
+    all_L_values.extend(L_values_low)
+    all_v_values.extend(v_values_low)
+
+    print(L0, rise_L0 + 0.5, )
+
+    i = i + 1  # 迭代器
+
+# 假设 all_L_values 和 all_v_values 已经定义
+sorted_indices = np.argsort(all_L_values)
+sorted_L_values = np.array(all_L_values)[sorted_indices]
+sorted_v_values = np.array(all_v_values)[sorted_indices]
+
+# 创建一个字典来存储每个唯一 L 值对应的最小 v 值
+L_to_min_v = {}
+
+for L, v in zip(sorted_L_values, sorted_v_values):
+    if L not in L_to_min_v:
+        L_to_min_v[L] = v
+    else:
+        L_to_min_v[L] = min(L_to_min_v[L], v)
+
+# 从字典中提取唯一的 L 值和对应的最小 v 值
+unique_L_values = np.array(list(L_to_min_v.keys()))
+unique_v_values = np.array(list(L_to_min_v.values()))
+
+# 确保唯一的 L 值和对应的 v 值是按原顺序排列的
+sorted_indices = np.argsort(unique_L_values)
+unique_L_values = unique_L_values[sorted_indices]
+unique_v_values = unique_v_values[sorted_indices]
+
+# 重新绘制曲线，使用 enumerate 来获取新列表中的索引
+ax.plot(unique_L_values, unique_v_values, color='green')
+# ax.plot(all_L_values, all_v_values, color='green')
+
+###------------------End-------------------------------
+
+
 plt.xlabel('距离（m）', fontproperties=font_prop)
 plt.ylabel('限速值（km/h）', fontproperties=font_prop)
 plt.title('限速区间图', fontproperties=font_prop)
@@ -239,6 +435,7 @@ def simulate_train_movement(start_position, start_speed, x_values, y_values, max
     return positions, speeds
 
 final_x = set(df_station['限速终点（m）'])
+
 # 处理特殊值
 additional_values = {1137.5: 55, 6974.5: 76, 18822: 72, 20180.5: 62, 22784: 72}
 
@@ -262,7 +459,6 @@ coordinates = []
 for i in range(len(train_x)):
     start_position = train_x[i]
     start_speed = train_y[i]
-
     positions, speeds = simulate_train_movement(start_position, start_speed, train_x, train_y)
     
     # 使用线性插值
@@ -292,19 +488,21 @@ for i, (x, _) in enumerate(sorted_line_points):
 # 合并两个数组
 merged_coordinates.extend(sorted_line_points[start_index:])
 for x, y in coordinates:
-    if x not in [coord[0] for coord in merged_coordinates]:
-        merged_coordinates.append((x, y))
-    else:
+    if x in [coord[0] for coord in merged_coordinates]:
         for i, (cx, cy) in enumerate(merged_coordinates):
             if cx == x:
                 merged_coordinates[i] = (x, min(y, cy))
+    else:
+        merged_coordinates.append((x, y))
+
+
 
 # # 按照横坐标从小到大排序
 merged_coordinates.sort(key=lambda coord: coord[0])
 
 x_merged = [point[0] for point in merged_coordinates]
 y_merged = [point[1] for point in merged_coordinates]
-ax.plot(x_merged, y_merged, color='pink')
+ax.plot(x_merged, y_merged, color='black')
 
 # with open('merged_coordinates.txt', 'w') as file:
 #     for x, y in merged_coordinates:
