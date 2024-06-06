@@ -96,15 +96,23 @@ for i in range(1, len(final_y_values)):
         pre_falling_points.append((final_x_values[i], final_y_values[i-1])-ATO_value)
     elif final_y_values[i] > final_y_values[i - 1]:
          # EBI的速度值要减去ATO余量（km/h）
-        rising_points_temp.append((final_x_values[i], final_y_values[i])-ATO_value)
-        rising_points.append((final_x_values[i], final_y_values[i])-ATO_value)
+        rising_points_temp.append((final_x_values[i]+80, final_y_values[i])-ATO_value)
+        rising_points.append((final_x_values[i]+80, final_y_values[i])-ATO_value)
 
 # 在开头添加新的点
 pre_falling_points.insert(0, (357, 60))
 rising_points_temp.insert(0, (357, 60))
 falling_points.insert(0, (357, 60))
+# 添加终点位置
+rising_points.append((23194,87))
+falling_points.append((23352,60))
+pre_falling_points.append((23352,87))
+# 输出下跌点
+print("下跌点位置（横坐标, 纵坐标）：")
+for point in falling_points:
+    print(point)
 
-# ------------------------------------------------------------------------
+###------------------End-------------------------------
 
 # 绘制限速区间图
 fig, ax = plt.subplots(figsize=(82, 15))
@@ -235,103 +243,135 @@ for index, row in df_station.iterrows():
 ax.text(90, -18, '站停时间（s）:', ha='center', fontproperties=font_prop)
 ax.text(90, -10, 'Run Time（s）:', ha='center', fontproperties=font_prop)
 
-# ----------------------EBI------------------------------
-# 记录求得的交点
-EBI_intersection_points_up = []
-EBI_intersection_points_constant = []
-EBI_intersection_points_down = []
+###---------------------EBI------------------------------
 # 创建大列表用于存储所有的 L 值和 v 值
 all_L_values = []
 all_v_values = []
+i=0
 
 # 使用 zip 并行遍历 pre_falling_points 和 falling_points  
-for (rise_L0, rise_v0),(rise_t_L0, rise_t_v0), (pre_L0, pre_v0), (L0, v0) in zip(rising_points,rising_points_temp,pre_falling_points, falling_points):  
-    # 牵引的峰值速度
-    reclosing_velocity = pre_v0 + 0.5 * traction_acceleration * np.power(traction_cut_off_delay, 2)  
-  
-    # 从 0 到 L0 的 L 值  
-    L_values = np.linspace(L0 - 500, L0, 500)  
+for (rise_L0, rise_v0),(rise_t_L0, rise_t_v0), (pre_L0, pre_v0), (L0, v0) in zip(rising_points, rising_points_temp, pre_falling_points, falling_points):  
+   
+    # 规范化 L0, rise_L0, 和 rise_t_v0 为 0.5 的倍数
+    L0 = round(L0 / 0.5) * 0.5
+    rise_L0 = round(rise_L0 / 0.5) * 0.5
+    rise_t_L0 = round(rise_t_L0 / 0.5) * 0.5
+
+    # 从 0 到 L0 的 L 值，确保间隔为0.5的倍数
+    L_values = np.arange(L0 - 500, L0, 0.5)
   
     # 计算对应的 v 值  
-    v_values = v0 + np.sqrt(2 * 8 * (L0 - L_values))  
+    # 注意单位换算
+    v_values = v0 + np.sqrt(2 * 1.2*3.6 * (L0 - L_values)) 
+
   
     # 找到最接近 reclosing_velocity 的 v_value 的索引  
-    closest_index = np.argmin(np.abs(v_values - reclosing_velocity))  
+    closest_index_new = np.argmin(np.abs(v_values - pre_v0))
+
   
     # 使用索引获取最接近的 L_value 和 v_value  
-    closest_L_value = L_values[closest_index]  
-    closest_v_value = v_values[closest_index]  
+    closest_L_value = L_values[closest_index_new]  
+    closest_v_value = v_values[closest_index_new]
 
     #-----开始绘制减速曲线-----
     # 使用索引获取从 closest_index 到末尾的子集
-    subset_L_values = L_values[closest_index:]
-    subset_v_values = v_values[closest_index:]    
+    subset_L_values = L_values[closest_index_new:]
+    subset_v_values = v_values[closest_index_new:]
 
-    # 计算匀速部分
-    constant_speed_y = closest_v_value
-    constant_speed_L = closest_L_value - closest_v_value * brake_establish_delay
+    # 规范化 closest_L_value 为 0.5 的倍数
+    closest_L_value = round(closest_L_value / 0.5) * 0.5
+    # 规范化 subset_L_values 中的每个元素为 0.5 的倍数
+    subset_L_values = np.array(subset_L_values)
+    rounded_values = np.round(subset_L_values * 2) / 2    
 
-    # v^2 - v0^2 = 2as 牵引加速阶段的行驶距离
-    delet_up_distance = (math.pow(closest_v_value, 2) - math.pow(pre_v0, 2)) / (2 * traction_acceleration)
-    up_speed_start_L = constant_speed_L - delet_up_distance
+    # # # 拼接顶棚数据-高速
+    if rise_t_L0 > closest_L_value :
+            
+        # 找到最接近 reclosing_velocity 的 v_value 的索引  
+        closest_index_new = np.argmin(np.abs(rise_L0 - L_values))
+        # 使用索引获取最接近的 L_value 和 v_value  
+        closest_L_value = L_values[closest_index_new]  
+        closest_v_value = v_values[closest_index_new]
 
-    # 将这个点（L_value, v_value）添加到 EBI_intersection_points 列表中  
-    # 开始加速的交点
-    EBI_intersection_points_up.append((up_speed_start_L, pre_v0)) 
-    # 开始匀速的交点
-    EBI_intersection_points_constant.append((constant_speed_L, constant_speed_y))
-    # 开始减速的交点
-    EBI_intersection_points_down.append((closest_L_value, closest_v_value))  
+        #-----开始绘制减速曲线-----
+        # 使用索引获取从 closest_index 到末尾的子集
+        subset_L_values = L_values[closest_index_new:]
+        subset_v_values = v_values[closest_index_new:]
+         # 规范化 closest_L_value 为 0.5 的倍数
+        closest_L_value = round(closest_L_value / 0.5) * 0.5
+        # 规范化 subset_L_values 中的每个元素为 0.5 的倍数
+        subset_L_values = np.array(subset_L_values)
+        rounded_values = np.round(subset_L_values * 2) / 2
 
-    #-----开始绘制加速曲线-----    
-    # 从 up_speed_start_L 到 constant_speed_L 的 L 值  
-    L_values_up = np.linspace(up_speed_start_L, constant_speed_L - 5, 300)  # 加入曲线平滑处理
-  
-    # 计算对应的 v 值  
-    v_values_up = pre_v0 + np.sqrt(2 * 0.005 * (L_values_up - up_speed_start_L))
-    
-    # 在末尾添加新值
-    L_values_up = np.append(L_values_up, constant_speed_L)
-    v_values_up = np.append(v_values_up, constant_speed_y)   
+        print(rise_t_L0 ,closest_L_value)
 
-    
-    #-----开始绘制匀速曲线-----
-    L_values_constant = np.linspace(constant_speed_L, closest_L_value, 300)  # 加入曲线平滑处理
-      # 计算对应的 v 值  
-    v_values_constant = np.full_like(L_values_constant, constant_speed_y)
+    # # 如果上述方法处理完数据，还是大，那就再处理
+    if rise_t_L0 > closest_L_value :
 
-    #------补充空白部分--------
-    # 低速阶段
-    L_values_low = np.linspace(L0, rise_L0, 400)  # 加入曲线平滑处理
-    v_values_low = np.linspace(v0, v0, 400)  # 加入曲线平滑处理
+        rise_t_L0 = closest_L_value
+
+    # 处理起点问题
+    if i == 0:
+        subset_L_values = [L for L, v in zip(subset_L_values, subset_v_values) if L > 356.5]
+        subset_v_values = [v for L, v in zip(subset_L_values, subset_v_values) if L > 356.5]
+    else:
+        tempL,tempV = falling_points[i-1]
+        print(tempV,v0,pre_v0)
+
     # 高速阶段
-    L_values_high = np.linspace(rise_t_L0, up_speed_start_L, 100)  # 加入曲线平滑处理
-    v_values_high = np.full_like(L_values_high, rise_v0)  # 加入曲线平滑处理
+    L_values_high = np.arange(rise_t_L0, closest_L_value, 0.5)  # 加入曲线平滑处理
+    v_values_high = np.full_like(L_values_high, rise_t_v0)  # 加入曲线平滑处理
 
-    print(rise_t_L0, up_speed_start_L)
+    # 低速阶段
+    L_values_low = np.arange(L0, rise_L0, 0.5)  # 加入曲线平滑处理
+    v_values_low = np.full_like(L_values_low, v0)  # 加入曲线平滑处理
     
+
+    #高速阶段    
     all_L_values.extend(L_values_high)
     all_v_values.extend(v_values_high)
-
-    # 拼接加速曲线数据
-    all_L_values.extend(L_values_up)
-    all_v_values.extend(v_values_up)
-
-    # 拼接匀速曲线数据
-    all_L_values.extend(L_values_constant)
-    all_v_values.extend(v_values_constant)
 
     # 拼接减速曲线数据
     all_L_values.extend(subset_L_values)
     all_v_values.extend(subset_v_values)
-
-    # 拼接顶棚数据
+    
+    # 拼接顶棚数据-低俗
     all_L_values.extend(L_values_low)
-    all_v_values.extend(v_values_low)    
+    all_v_values.extend(v_values_low)
+
+    print(L0, rise_L0 + 0.5,)
+
+    i= i + 1 # 迭代器 
 
 
-# 绘制拼接后的完整曲线 EBI
-ax.plot(all_L_values, all_v_values, color='green')
+# 假设 all_L_values 和 all_v_values 已经定义
+sorted_indices = np.argsort(all_L_values)
+sorted_L_values = np.array(all_L_values)[sorted_indices]
+sorted_v_values = np.array(all_v_values)[sorted_indices]
+
+# 创建一个字典来存储每个唯一 L 值对应的最小 v 值
+L_to_min_v = {}
+
+for L, v in zip(sorted_L_values, sorted_v_values):
+    if L not in L_to_min_v:
+        L_to_min_v[L] = v
+    else:
+        L_to_min_v[L] = min(L_to_min_v[L], v)
+
+# 从字典中提取唯一的 L 值和对应的最小 v 值
+unique_L_values = np.array(list(L_to_min_v.keys()))
+unique_v_values = np.array(list(L_to_min_v.values()))
+
+# 确保唯一的 L 值和对应的 v 值是按原顺序排列的
+sorted_indices = np.argsort(unique_L_values)
+unique_L_values = unique_L_values[sorted_indices]
+unique_v_values = unique_v_values[sorted_indices]
+
+# 重新绘制曲线，使用 enumerate 来获取新列表中的索引
+ax.plot(unique_L_values, unique_v_values, color='green')
+# ax.plot(all_L_values, all_v_values, color='green')
+
+###------------------End-------------------------------
 
 plt.xlabel('距离（m）', fontproperties=font_prop)
 plt.ylabel('限速值（km/h）', fontproperties=font_prop)
