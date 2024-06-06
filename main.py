@@ -181,12 +181,9 @@ for index, row in df_station.iterrows():
 for index, row in df_curve.iterrows():
      ax.plot([row['限速起点（m）'], row['限速终点（m）']], [row['限速值（km/h）'], row['限速值（km/h）']], color='red')
 
-
-
-
-
-
-
+# 间隔时间
+Interval_times = [87.51, 71.27, 124.99, 99.48, 78.67, 94.40, 78.25, 84.61, 90.24, 99.35, 94.62, 98.90, 74.06,
+                  77.12, 82.53, 105.38, 79.65, 122.91, 96.34, 85.98,0.0]
 
 # 添加正常的横坐标刻度
 ax.set_xticks(range(0, int(df_station['限速终点（m）'].max()) + 1000, 1000))
@@ -200,7 +197,14 @@ for index, row in df_station.iterrows():
     ax.add_patch(rect)
     midpoint = (rect_start + rect_end) / 2
     ax.text(midpoint, -15, row['站台名'], ha='center', fontproperties=font_prop)
+    time_str = str(row['站停时间（s）']) + 's'
+    ax.text(midpoint, -18, time_str, ha='center', fontproperties=font_prop)
+    interval_time_str = str(Interval_times[index]) + 's'
+    ax.text(midpoint+500, -10, interval_time_str, ha='center', fontproperties=font_prop, color='red')
 
+
+ax.text(90, -18, '站停时间（s）:', ha='center', fontproperties=font_prop)
+ax.text(90, -10, 'Run Time（s）:', ha='center', fontproperties=font_prop)
 plt.xlabel('距离（m）', fontproperties=font_prop)
 plt.ylabel('限速值（km/h）', fontproperties=font_prop)
 plt.title('限速区间图', fontproperties=font_prop)
@@ -252,9 +256,6 @@ unique_coords.sort()
 train_x = [round(coord[0] * 2) / 2 for coord in unique_coords]  # 调整起点为最接近的 0.5 的倍数
 train_y = [coord[1] for coord in unique_coords]
 
-# print("train_x", train_x)
-# print("train_y", train_y)
-
 coordinates = []
 
 # 从每个限速终点开始模拟
@@ -263,7 +264,7 @@ for i in range(len(train_x)):
     start_speed = train_y[i]
 
     positions, speeds = simulate_train_movement(start_position, start_speed, train_x, train_y)
-
+    
     # 使用线性插值
     f_speed = interp1d(positions, speeds)
     # 生成每隔0.5米的位置数据
@@ -275,10 +276,10 @@ for i in range(len(train_x)):
         coordinate = (pos, speed)
         coordinates.append(coordinate)
         # print(f"位置 {pos:.2f}, 速度 {speed:.2f}")
-
+    
     # ax.plot(positions, speeds, color='pink')
 
-
+ 
 merged_coordinates = []
 
 # 找到从横坐标为515开始的索引
@@ -305,7 +306,23 @@ x_merged = [point[0] for point in merged_coordinates]
 y_merged = [point[1] for point in merged_coordinates]
 ax.plot(x_merged, y_merged, color='pink')
 
+# with open('merged_coordinates.txt', 'w') as file:
+#     for x, y in merged_coordinates:
+#         file.write(f"{x},{y}\n")
+# 计算时间
+
+# time_x = list(final_x)
+# time_x = [round(coord * 2) / 2 for coord in time_x]
+
+# 找到所有 y_merged 为 0 的索引
+# zero_indices = [i for i, y in enumerate(y_merged) if y == 0]
+# 输出索引
+# print(zero_indices)
+
 # plt.legend()
 plt.show()
+
+
+
 
 # (1137.5,55)/(6974.5,76)/(18822,72)/(20180.5,62)/(22784,72)
