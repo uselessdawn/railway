@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib.font_manager import FontProperties
 import numpy as np
+from scipy.interpolate import interp1d
 # 设置中文字体路径
 font_path = '/System/Library/Fonts/STHeiti Medium.ttc'
 # font_path = 'C:\\Windows\\Fonts\\SimHei.ttf'
@@ -207,61 +208,104 @@ plt.grid(True)
 plt.ylim(bottom=-20)  # 确保底部有足够的空间显示矩形和站台名称
 
 # 模拟列车运动
-def get_speed_limit(position, x_values, y_values):
-    # 获取当前位置的限速值
-    for i in range(len(x_values) - 1):
-        if x_values[i] <= position < x_values[i + 1]:
-            return y_values[i] * 1000 / 3600  # 转换为 m/s
-    return y_values[-1] * 1000 / 3600  # 转换为 m/s
-
-
-def simulate_train_movement(start_position, start_speed, accel, traction_accel, x_values, y_values):
+def simulate_train_movement(start_position, start_speed, x_values, y_values, max_speed=87, accel=0.8, traction_accel=0.5):
     positions = [start_position]
     speeds = [start_speed]
 
-    current_speed = start_speed
+    current_speed = start_speed * 1000 / 3600  # 转换为 m/s
     current_position = start_position
-    dt = 0.1  # 时间步长，秒
+    dt = 1  # 时间步长，秒
 
-    while current_position < max(x_values):
-        if current_speed < 40 * 1000 / 3600:  # 40 km/h in m/s
-            current_speed += accel * dt
+    max_speed = max_speed * 1000 / 3600  # 转换为 m/s
+
+    # iteration = 0
+    while current_speed < max_speed:
+        if current_speed > max_speed:  # 限制最大速度
+            break
         else:
-            current_speed += traction_accel * dt
-
-        current_limit = get_speed_limit(current_position, x_values, y_values)
-        if current_speed > current_limit:  # 如果超过限速，调整速度
-            current_speed = current_limit
+            if current_speed < 40 * 1000 / 3600:  # 40 km/h in m/s
+                current_speed += accel * dt
+            else:
+                current_speed += traction_accel * dt
 
         current_position += current_speed * dt
         positions.append(current_position)
         speeds.append(current_speed * 3600 / 1000)  # 转换为 km/h
 
-        if current_position in x_values:  # 到达限速终点，停止计算
-            break
-
     return positions, speeds
 
-train_x = final_x_values
-train_y = final_y_values
+final_x = set(df_station['限速终点（m）'])
+# 处理特殊值
+additional_values = {1137.5: 55, 6974.5: 76, 18822: 72, 20180.5: 62, 22784: 72}
 
-# 删除指定的 train_x 元素
-value_to_remove = set(df_station['限速终点（m）'])  # 使用集合以避免重复值
-indices_to_keep = [i for i, x in enumerate(train_x) if x in value_to_remove]
+# 创建合并的x_values和y_values
+train_x = list(final_x) + list(additional_values.keys())
+train_y = [0] * len(final_x) + list(additional_values.values())
 
-# 使用列表推导式创建新的train_x和train_y列表
-train_x_new = [train_x[i] for i in indices_to_keep]
-train_y_new = [train_y[i] for i in indices_to_keep]
+# 将x和y值结合起来去重
+unique_coords = list(set(zip(train_x, train_y)))
 
-# 将新列表赋值给原始变量
-train_x = train_x_new
-train_y = train_y_new
+# 按x值排序
+unique_coords.sort()
+
+# 分离x和y值
+train_x = [round(coord[0] * 2) / 2 for coord in unique_coords]  # 调整起点为最接近的 0.5 的倍数
+train_y = [coord[1] for coord in unique_coords]
+
+# print("train_x", train_x)
+# print("train_y", train_y)
+
+coordinates = []
 
 # 从每个限速终点开始模拟
-for i in range(1, len(train_x), 2):  # 只在限速终点开始模拟
+for i in range(len(train_x)):
     start_position = train_x[i]
-    positions, speeds = simulate_train_movement(start_position, 0, 0.8, 0.5, train_x, train_y)
-    ax.plot(positions, speeds, color='pink', label=f'列车运动轨迹从{start_position}m开始')
+    start_speed = train_y[i]
+
+    positions, speeds = simulate_train_movement(start_position, start_speed, train_x, train_y)
+
+    # 使用线性插值
+    f_speed = interp1d(positions, speeds)
+    # 生成每隔0.5米的位置数据
+    interpolated_positions = np.arange(min(positions), max(positions), 0.5)
+    # 计算对应的速度
+    interpolated_speeds = f_speed(interpolated_positions)
+    # 输出每隔0.5米的纵坐标
+    for pos, speed in zip(interpolated_positions, interpolated_speeds):
+        coordinate = (pos, speed)
+        coordinates.append(coordinate)
+        # print(f"位置 {pos:.2f}, 速度 {speed:.2f}")
+
+    # ax.plot(positions, speeds, color='pink')
+
+
+merged_coordinates = []
+
+# 找到从横坐标为515开始的索引
+start_index = 0
+for i, (x, _) in enumerate(sorted_line_points):
+    if x >= 515:
+        start_index = i
+        break
+
+# 合并两个数组
+merged_coordinates.extend(sorted_line_points[start_index:])
+for x, y in coordinates:
+    if x not in [coord[0] for coord in merged_coordinates]:
+        merged_coordinates.append((x, y))
+    else:
+        for i, (cx, cy) in enumerate(merged_coordinates):
+            if cx == x:
+                merged_coordinates[i] = (x, min(y, cy))
+
+# # 按照横坐标从小到大排序
+merged_coordinates.sort(key=lambda coord: coord[0])
+
+x_merged = [point[0] for point in merged_coordinates]
+y_merged = [point[1] for point in merged_coordinates]
+ax.plot(x_merged, y_merged, color='pink')
 
 # plt.legend()
 plt.show()
+
+# (1137.5,55)/(6974.5,76)/(18822,72)/(20180.5,62)/(22784,72)
